@@ -69,7 +69,7 @@ void Get_CH224Qstatus() {
     Serial.println("\n/-----------------------------------/");
     Serial.println("            CH224Q Status           ");
     Serial.println("/-----------------------------------/");
-
+    CH224Q_Data_Init(); // 初始化數據結構
     // 讀取 I2C 狀態寄存器
     CH224Q.I2C_status.Data = I2C_Read_Byte(0x23, 0x09);
     delay(2);
