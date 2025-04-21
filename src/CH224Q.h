@@ -139,6 +139,9 @@ void PPS_req(float vol);
 void Fixed_req(uint8_t vol);
 void SourceCap_Analyse();
 
+
+bool isI2CDevicePresent(uint8_t address);
+
 //----------------------------------------------------------------------------------------------//
 
 #endif /* CH224Q_H_ */

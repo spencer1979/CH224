@@ -4,9 +4,9 @@ A library for interfacing with the CH224 PD controller via I2C on Arduino-compat
 
 ## Features
 - Read and write CH224 registers via I2C.
-- Support for PDO (Power Data Object) data parsing.
-- Voltage request functionality (5V, 9V, 12V, 15V, 20V, 28V, PPS, AVS).
-- Hardware monitoring (current, AVS voltage, PPS voltage).
+- Parse PDO (Power Data Object) data.
+- Request specific voltage levels (5V, 9V, 12V, 15V, 20V, 28V, PPS, AVS).
+- Monitor hardware parameters (current, AVS voltage, PPS voltage).
 - Check support for EPR, QC 3.0, QC 2.0, and BC modes.
 
 ## Register Descriptions
@@ -14,16 +14,16 @@ A library for interfacing with the CH224 PD controller via I2C on Arduino-compat
 - **0x09: Status Register**
   - Provides information about supported USB-PD features, such as BC, QC2.0, QC3.0, PD, EPR, and AVS.
   - Example:
-    - `BIT0`: BC Activation
-    - `BIT1`: QC2 Activation
-    - `BIT2`: QC3 Activation
-    - `BIT3`: PD Activation
-    - `BIT4`: EPR Activation
-    - `BIT5`: EPR Exist
-    - `BIT6`: AVS Exist
+    - `BIT0`: BC Mode Active
+    - `BIT1`: QC2 Mode Active
+    - `BIT2`: QC3 Mode Active
+    - `BIT3`: PD Mode Active
+    - `BIT4`: EPR Mode Active
+    - `BIT5`: EPR Available
+    - `BIT6`: AVS Available
 
 - **0x0A: Voltage Control Register**
-  - Used to request specific voltage modes:
+  - Used to request specific voltage levels:
     - `0x00`: 5V
     - `0x01`: 9V
     - `0x02`: 12V
@@ -38,12 +38,12 @@ A library for interfacing with the CH224 PD controller via I2C on Arduino-compat
   - Unit: 50mA.
 
 - **0x51, 0x52: AVS Voltage Configuration Registers**
-  - Used to configure AVS request voltage.
+  - Configure the AVS requested voltage.
   - Unit: 25mV.
   - Write the high 8 bits to `0x51` and the low 8 bits to `0x52`.
 
 - **0x53: PPS Voltage Configuration Register**
-  - Used to configure PPS request voltage.
+  - Configure the PPS requested voltage.
   - Unit: 100mV.
 
 - **0x60~0x8F: PD Power Data Registers**
