@@ -35,65 +35,32 @@ void CH224Q_init(uint8_t sda, uint8_t scl) {
     Serial.println(scl);
 }
 
-bool isI2CDevicePresent(uint8_t address) {
-    Wire.beginTransmission(address);
-    uint8_t error = Wire.endTransmission();
-    return (error == 0); // 如果返回 0，表示設備存在
-}
-
 void I2C_Write_Byte(uint8_t addr, uint8_t reg, uint8_t data) {
-    uint8_t result = Wire.beginTransmission(addr);
-    if (result != 0) { // 檢查傳輸是否成功
-        Serial.printf("I2C Write Error: Unable to communicate with device at 0x%02X\n", addr);
-        return;
-    }
+    Wire.beginTransmission(addr);
     Wire.write(reg);
-    result = Wire.endTransmission();
-    if (result != 0) { // 檢查結束傳輸是否成功
-        Serial.printf("I2C Write Error: Transmission failed for device at 0x%02X\n", addr);
-    }
+    Wire.write(data);
+    Wire.endTransmission();
 }
 
 uint8_t I2C_Read_Byte(uint8_t addr, uint8_t reg) {
-    uint8_t result = Wire.beginTransmission(addr);
-    if (result != 0) { // 檢查傳輸是否成功
-        Serial.printf("I2C Read Error: Unable to communicate with device at 0x%02X\n", addr);
-        return 0; // 返回預設值
-    }
+    Wire.beginTransmission(addr);
     Wire.write(reg);
-    result = Wire.endTransmission(false);
-    if (result != 0) { // 檢查結束傳輸是否成功
-        Serial.printf("I2C Read Error: Transmission failed for device at 0x%02X\n", addr);
-        return 0; // 返回預設值
-    }
+    Wire.endTransmission(false);
     Wire.requestFrom(addr, (uint8_t)1);
     if (Wire.available()) {
         return Wire.read();
-    } else {
-        Serial.printf("I2C Read Error: No data available from device at 0x%02X\n", addr);
-        return 0; // 返回預設值
     }
+    return 0xFF; // 返回錯誤值
 }
 
 void I2C_SequentialRead(uint8_t addr, uint8_t reg, uint8_t len) {
-    uint8_t result = Wire.beginTransmission(addr);
-    if (result != 0) { // 檢查傳輸是否成功
-        Serial.printf("I2C Sequential Read Error: Unable to communicate with device at 0x%02X\n", addr);
-        return;
-    }
+    Wire.beginTransmission(addr);
     Wire.write(reg);
-    result = Wire.endTransmission(false);
-    if (result != 0) { // 檢查結束傳輸是否成功
-        Serial.printf("I2C Sequential Read Error: Transmission failed for device at 0x%02X\n", addr);
-        return;
-    }
+    Wire.endTransmission(false);
     Wire.requestFrom(addr, len);
     for (uint8_t i = 0; i < len; i++) {
         if (Wire.available()) {
             CH224Q.PD_data[i] = Wire.read();
-        } else {
-            Serial.printf("I2C Sequential Read Error: No data available at index %d from device at 0x%02X\n", i, addr);
-            CH224Q.PD_data[i] = 0; // 填充預設值
         }
     }
 }
