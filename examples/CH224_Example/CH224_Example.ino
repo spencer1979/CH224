@@ -1,35 +1,33 @@
 #include <Arduino.h>
+#include "CH224.h" // 假設你的 library 名稱為 CH224.h
 #include <Wire.h>
-#include "CH224Q.h" // 引入 CH224Q.h
-
-uint8_t voltageLevels[] = {5, 9, 15}; // 定義電壓級別
-uint8_t currentIndex = 0;            // 當前電壓索引
+#include <Arduino.h>
+uint8_t voltageLevels[] = {5, 9, 15}; // 支援的電壓級別
+uint8_t currentIndex = 0;
 
 void setup() {
-    // 初始化內建 USB 串列，波特率為 115200
     Serial.begin(115200);
     while (!Serial) {
-        delay(10); // 等待串列初始化
+        delay(10);
     }
-    Serial.println("ESP32-WROOM USB Serial Initialized");
+    Serial.println("CH224 Demo Start");
 
-    // 初始化 I2C，使用 GPIO 21 作為 SDA，GPIO 22 作為 SCL
-    CH224Q_init(2, 3); // 初始化 CH224Q，指定 SDA 和 SCL 引腳
-    Serial.println("CH224Q Initialized");
-
-    // 初始化 CH224Q 數據結構
-    CH224Q_Data_Init();
+    // 初始化 CH224，假設 SDA=2, SCL=3
+    CH224_init(2, 3);
+    Serial.println("CH224 Initialized");
 }
 
 void loop() {
-    // 設置電壓
     uint8_t voltage = voltageLevels[currentIndex];
-    Serial.printf("Setting voltage to %dV...\n", voltage);
-    Fixed_req(voltage); // 使用 Fixed_req 設置電壓
+    Serial.printf("Requesting %dV output...\n", voltage);
 
-    // 切換到下一個電壓級別
-    currentIndex = (currentIndex + 1) % 3; // 循環切換 5V -> 9V -> 15V
+    // 設定電壓，假設函式名稱為 CH224_SetVoltage
+    if ( CH224_Fixed_Request(uint8_t vol) ) {
+        Serial.println("Voltage set successfully.");
+    } else {
+        Serial.println("Failed to set voltage.");
+    }
 
-    // 延遲 2 秒
+    currentIndex = (currentIndex + 1) % (sizeof(voltageLevels) / sizeof(voltageLevels[0]));
     delay(2000);
 }

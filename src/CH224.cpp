@@ -39,10 +39,12 @@ uint16_t PD_Msg[10][4];
  */
 void CH224_Init(uint8_t sda, uint8_t scl) {
     Wire.begin(sda, scl); // ESP32/ESP8266 supports specifying SDA/SCL pins
-
+    CH224_DataInit(); // Initialize data structure
     DEBUG_PRINTF("I2C Initialized with SDA: ");
     DEBUG_PRINTF("%d, SCL: %d\n", sda, scl);
+  
 }
+
 
 /**
  * @brief Resets the CH224 data structure to its default state.
@@ -276,7 +278,7 @@ void CH224_SourceCap_Analyse() {
  * @param type The type of power supply (1=Fixed, 2=PPS, 3=AVS).
  * @return true if the requested voltage is supported, false otherwise.
  */
-bool CH224_HasValidPdVoltage(uint16_t req_mv, uint8_t type)
+bool CH224_HasValidPdVoltage(uint8_t type,uint16_t req_mv)
 {
     for (uint8_t i = 0; i < 10; i++) {
         // type: 1=Fixed, 2=PPS, 3=AVS
@@ -304,81 +306,120 @@ bool CH224_HasValidPdVoltage(uint16_t req_mv, uint8_t type)
 }
 
 
-
 /**
  * @brief Sends a request to set the fixed voltage mode with the specified voltage.
  *
  * @param vol The desired voltage in millivolts (e.g., 5000 for 5V).
  */
-void CH224_Fixed_Request(uint8_t vol)
+bool CH224_Fixed_Request(uint8_t vol)
 {
-    if (!CH224_HasValidPdVoltage( vol*1000 , PD_FIXED_SUPPLY)) {
-        DEBUG_PRINTF("Requested voltage %dmV not supported.\r\n", vol);
-        return;
+    if (!CH224_HasValidPdVoltage(PD_FIXED_SUPPLY, vol * 1000)) {
+        DEBUG_PRINTF("Requested voltage %dmV not supported.\r\n", vol * 1000);
+        return false;
     }
 
     uint8_t read_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG);
+    uint8_t set_val = CH224_VOL_5V;
+    bool valid = true;
 
     switch (vol)
     {
         case 5:
-            DEBUG_PRINTF("Read before set (5V): 0x%02x\n", read_val);
-            if (read_val != CH224_VOL_5V)
-                delay(2);
-            I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_5V);
-            DEBUG_PRINTF("Req_ 5V... \r\n");
+            set_val = CH224_VOL_5V;
             break;
         case 9:
-            DEBUG_PRINTF("Read before set (9V): 0x%02x\n", read_val);
-            if (read_val != CH224_VOL_9V)
-                delay(2);
-            I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_9V);
-            DEBUG_PRINTF("Req_ 9V...  \r\n");
+            set_val = CH224_VOL_9V;
             break;
         case 12:
-            DEBUG_PRINTF("Read before set (12V): 0x%02x\n", read_val);
-            if (read_val != CH224_VOL_12V)
-                delay(2);
-            I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_12V);
-            DEBUG_PRINTF("Req_12V...  \r\n");
+            set_val = CH224_VOL_12V;
             break;
         case 15:
-            DEBUG_PRINTF("Read before set (15V): 0x%02x\n", read_val);
-            if (read_val != CH224_VOL_15V)
-                delay(2);
-            I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_15V);
-            DEBUG_PRINTF("Req_15V...  \r\n");
+            set_val = CH224_VOL_15V;
             break;
         case 20:
-            DEBUG_PRINTF("Read before set (20V): 0x%02x\n", read_val);
-            if (read_val != CH224_VOL_20V)
-                delay(2);
-            I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_20V);
-            DEBUG_PRINTF("Req_20V...  \r\n");
+            set_val = CH224_VOL_20V;
             break;
-        case 28 :
-            DEBUG_PRINTF("Read before set (28V): 0x%02x\n", read_val);
-            if (read_val != CH224_VOL_28V)
-                delay(2);
-            I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_28V);
-            DEBUG_PRINTF("Req_28V...  \r\n");
+        case 28:
+            set_val = CH224_VOL_28V;
             break;
         default:
-            DEBUG_PRINTF("Req_error...  \r\n");
+            valid = false;
             break;
     }
-    delay(2);
+
+    if (!valid) {
+        DEBUG_PRINTF("Req_error...  \r\n");
+        return false;
+    }
+
+    DEBUG_PRINTF("Read before set (%dV): 0x%02x\n", vol, read_val);
+    if (read_val != set_val) {
+        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, set_val);
+        delay(2);
+        DEBUG_PRINTF("Req_%dV...  \r\n", vol);
+    }
+    else {
+        DEBUG_PRINTF("Already set to %dV...  \r\n", vol);
+    }
+    // 最後再做i2c讀 判斷是否是設定電壓
+    uint8_t confirm_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG);
+    bool success = (confirm_val == set_val);
+    DEBUG_PRINTF("Confirm set voltage: 0x%02x, %s\n", confirm_val, success ? "OK" : "FAIL");
+    return success;
 }
 
 
 /**
- * @brief Sends a request to set the AVS (Adaptive Voltage Scaling) mode with the specified voltage.
+ * 
+ * @brief Sends a request to set the AVS (Adjustable Voltage Supply) mode with the specified voltage.
  *
  * @param vol The desired voltage in volts (e.g., 5.0 for 5V).
+ * @return true if the request was successful, false otherwise.
  */
-void CH224_AVS_Request(float vol)
+bool CH224_AVS_Request(float vol)
 {
-    
+    // Check if the requested voltage is within the valid range for AVS
+    if (CH224_HasAVS() == false)
+    {
+        DEBUG_PRINTLN("AVS not supported !");
+        return false;
+    }
+
+    uint16_t req_mv = (uint16_t)(vol * 1000);
+    if (!CH224_HasValidPdVoltage(PD_AVS_SUPPLY, req_mv))
+    {
+        DEBUG_PRINTF("AVS voltage %.2fV (=%dmV) not supported by PD_Msg[]\n", vol, req_mv);
+        return false;
+    }
+
+    // Calculate AVS register value (AVS_H: high byte, AVS_L: low byte, value in 25mV steps)
+    uint16_t avs_val = req_mv / 25;
+    uint8_t avs_h = (avs_val >> 8) & 0xFF;
+    uint8_t avs_l = avs_val & 0xFF;
+
+    // Write AVS voltage registers
+    I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_AVS_CFG_H, avs_h);
+    delay(2);
+    I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_AVS_CFG_L, avs_l);
+    delay(2);
+
+    // Switch to AVS mode
+    I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_MODE_AVS);
+    delay(2);
+
+    // Read back AVS_H, AVS_L, and VOL_CFG for confirmation
+    uint8_t read_avs_h = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_AVS_CFG_H);
+    delay(2);
+    uint8_t read_avs_l = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_AVS_CFG_L);
+    delay(2);
+    uint8_t read_mode = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG);
+
+    bool success = (read_avs_h == avs_h) && (read_avs_l == avs_l) && (read_mode == CH224_MODE_AVS);
+
+    DEBUG_PRINTF("AVS request: %.2fV (AVS_H=0x%02x, AVS_L=0x%02x), readback H=0x%02x, L=0x%02x, MODE=0x%02x, %s\n",
+        vol, avs_h, avs_l, read_avs_h, read_avs_l, read_mode, success ? "OK" : "FAIL");
+
+    return success;
 }
 
 /**
@@ -388,40 +429,49 @@ void CH224_AVS_Request(float vol)
  * @return true if the request was successful, false otherwise.
  */
 bool CH224_PPS_Request(float vol)
-{ // Check if the requested voltage is within the valid range for PPS
-
-    bool found = CH224_HasValidPdVoltage((uint16_t)(vol * 1000), PD_PPS_SUPPLY); // Check if the requested voltage is supported by PD_Msg[]
-    if (!found)
+{
+    // Check if the requested voltage is within the valid range for PPS
+    if (CH224_HasPPS() == false)
     {
-        DEBUG_PRINTF("PPS voltage %.2fV (=%dmV) not supported by PD_Msg[]\n", vol, (uint16_t)(vol * 1000));
+        DEBUG_PRINTLN("PPS not supported !");
+        return false;
+    }
+
+    uint16_t req_mv = (uint16_t)(vol * 1000);
+    if (!CH224_HasValidPdVoltage(PD_PPS_SUPPLY, req_mv))
+    {
+        DEBUG_PRINTF("PPS voltage %.2fV (=%dmV) not supported by PD_Msg[]\n", vol, req_mv);
         return false;
     }
 
     // Read current VOL_CFG register to determine if already in PPS mode
     uint8_t vol_cfg_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG);
+    uint8_t set_val = (uint8_t)(vol * 10.0f);
 
     if (vol_cfg_val != CH224_MODE_PPS)
     {
         // First time applying for PPS: set PPS voltage first, then switch to PPS mode
-        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG, (uint8_t)(vol * 10.0f));
+        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG, set_val);
         delay(2);
         I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_MODE_PPS);
         delay(2);
-        DEBUG_PRINTF("First PPS request: Set PPS_CFG=0x%02x, then VOL_CFG=PPS mode\n", (uint8_t)(vol * 10.0f));
+        DEBUG_PRINTF("First PPS request: Set PPS_CFG=0x%02x, then VOL_CFG=PPS mode\n", set_val);
     }
     else
     {
         // Already in PPS mode: just update PPS voltage
-        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG, (uint8_t)(vol * 10.0f));
+        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG, set_val);
         delay(2);
-        DEBUG_PRINTF("PPS mode already set: Update PPS_CFG=0x%02x\n", (uint8_t)(vol * 10.0f));
+        DEBUG_PRINTF("PPS mode already set: Update PPS_CFG=0x%02x\n", set_val);
     }
 
-    // Read back and print for debug
+    // Read back and compare for confirmation
     uint8_t pps_cfg_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG);
-    DEBUG_PRINTF("PPS_CFG reg readback: 0x%02x\n", pps_cfg_val);
-    DEBUG_PRINTF("PPSdata_write: %02x     Req:  %.2f V \r\n", (uint8_t)(vol * 10.0f), (float)(vol / 10.0f));
-    return true;
+    DEBUG_PRINTF("PPS_CFG reg readback: 0x%02x (%d)\n", pps_cfg_val, pps_cfg_val);
+
+    bool success = (pps_cfg_val == set_val);
+    DEBUG_PRINTF("PPS set %s\n", success ? "OK" : "FAIL");
+    return success;
 }
 /**
  * @brief Gets the minimum or maximum voltage limit for PPS or AVS mode.
@@ -447,3 +497,110 @@ uint16_t CH224_GetPPSAVSLimitVoltage(uint8_t type, bool get_max)
     }
     return 0;
 }
+/**
+ * @brief Gets the fixed voltage setting from the CH224 device.
+ *
+ * @return uint16_t The fixed voltage in millivolts.
+ */
+uint16_t CH224_GetFixedVoltage()
+{   
+    uint8_t fixed_vol = 99;
+    uint16_t vol = 0;
+    fixed_vol = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG);
+    switch (fixed_vol)
+    {
+        case CH224_VOL_5V:
+            vol = 5000;
+            break;
+        case CH224_VOL_9V:
+            vol = 9000;
+            break;
+        case CH224_VOL_12V:
+            vol = 12000;
+            break;
+        case CH224_VOL_15V:
+            vol = 15000;
+            break;
+        case CH224_VOL_20V:
+            vol = 20000;
+            break;
+        case CH224_VOL_28V:
+            vol = 28000;
+            break;
+        default:
+            vol = 0; // Invalid voltage
+            break;
+    }
+    DEBUG_PRINTF("Fixed voltage: %d mV\n", vol);
+    return vol;
+}
+
+/**
+ * @brief Gets the PPS voltage setting from the CH224 device.
+ *
+ * @return uint16_t The PPS voltage in millivolts.
+ */
+uint16_t CH224_GetPPSVoltage()
+{
+    uint8_t pps_vol = 0;
+    uint16_t vol = 0;
+    pps_vol = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG);
+    vol = (uint16_t)(pps_vol * 100);
+    DEBUG_PRINTF("PPS voltage: %d mV\n", vol);
+    return vol;
+}
+/**
+ * @brief Gets the AVS (Adaptive Voltage Scaling) voltage from the CH224 device.
+ *
+ * @return uint16_t The AVS voltage in millivolts.
+ */
+uint16_t CH224_GetAVSVoltage()
+{
+    uint16_t vol = 0;
+    // Read AVS voltage from CH224 registers
+    // AVS_H and AVS_L are combined to form the full voltage value
+    // AVS_H is the high byte, and AVS_L is the low byte
+    uint8_t avs_h = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_AVS_CFG_H);
+    uint8_t avs_l = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_AVS_CFG_L);
+    vol = (uint16_t)((  avs_h << 8) | avs_l);
+    vol = (uint16_t)(vol * 25);
+    DEBUG_PRINTF("AVS voltage: %d mV\n", vol);
+    return vol;
+}
+
+bool CH224_HasPPS(void)
+{
+    for (uint8_t i = 0; i < 10; i++) {
+        if (PD_Msg[i][0] == PD_PPS_SUPPLY) {
+            DEBUG_PRINTLN("PPS supported");
+            return true;
+        }
+    }
+    DEBUG_PRINTLN("PPS not supported");
+    return false;
+}   
+
+bool CH224_HasAVS(void)
+{
+    for (uint8_t i = 0; i < 10; i++) {
+        if (PD_Msg[i][0] == PD_AVS_SUPPLY) {
+            DEBUG_PRINTLN("AVS supported");
+            return true;
+        }
+    }
+    DEBUG_PRINTLN("AVS not supported");
+    return false;
+}
+
+bool CH224_HasEPR(void)
+{
+    if (CH224.I2C_status.EPR_EXIST == 1) {
+        DEBUG_PRINTLN("EPR supported");
+        return true;
+    }
+    DEBUG_PRINTLN("EPR not supported");
+    return false;
+}
+
+
+

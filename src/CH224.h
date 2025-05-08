@@ -267,20 +267,20 @@ typedef union {
  * |    PDP     | MinVoltage | MaxVoltage | PeakC  | EPRAVS |  APDO  |
  * +------------+------------+------------+--------+--------+--------+
  *  |                |             |         |         |         |
- *  |                |             |         |         |         +-- [1:0]   APDO 類型 (2 bits)
- *  |                |             |         |         +------------ [3:2]   EPR AVS 模式 (2 bits)
- *  |                |             |         +----------------------- [5:4]   峰值電流能力 (2 bits)
- *  |                |             +--------------------------------- [14:6]  最大電壓 (9 bits, 單位 100mV)
- *  |                +----------------------------------------------- [23:15] 最小電壓 (9 bits, 單位 100mV)
- *  +--------------------------------------------------------------- [31:24] PDP (8 bits, 單位 1W)
+ *  |                |             |         |         |         +-- [1:0]  APDO Type (2 bits)
+ *  |                |             |         |         +------------ [3:2]   EPR AVS mode (2 bits)
+ *  |                |             |         +----------------------- [5:4]   Peak current capability (2 bits)
+ *  |                |             +--------------------------------- [14:6]  Maximum voltage (9 bits, unit 100mV)
+ *  |                +----------------------------------------------- [23:15] Minimum voltage (9 bits, unit 100mV)
+ *  +--------------------------------------------------------------- [31:24] PDP (8 bits, unit 1W)
  *
- * 字段說明:
- * - PDP (8 bits): 可提供的最大功率，單位為 1W。
- * - MinVoltage (9 bits): 可提供的最小電壓，單位為 100mV。
- * - MaxVoltage (9 bits): 可提供的最大電壓，單位為 100mV。
- * - PeakCurrent (2 bits): 峰值電流能力。
- * - EPRAVS (2 bits): 可調電壓供應模式。
- * - APDO (2 bits): 擴展電源數據對象 (APDO) 類型。
+ * Field Description:
+ * - PDP (8 bits):The maximum power available in 1W.
+ * - MinVoltage (9 bits):The minimum voltage available in 100mV.
+ * - MaxVoltage (9 bits): The maximum voltage available in 100mV.
+ * - PeakCurrent (2 bits): Peak current capability.
+ * - EPRAVS (2 bits): Adjustable voltage supply mode.
+ * - APDO (2 bits): Extended Power Data Object (APDO) type.
  */
 typedef union {
     struct {
@@ -306,11 +306,12 @@ extern AVSupply Rx_AVSupply;
 
 extern PD_Message_Header_t Rx_Header;
 extern PD_Message_ExtHeader_t Rx_Ext_Header;
-//PD_Msg[10][4] 代表最多 10 個 PDO，每個 PDO 佔用 4 個 uint16_t
-//PD_Msg[0][0] 代表 PDO 類型，1 代表固定電壓，2 代表 PPS，3 代表 AVS，4 代表無效的 PDO
-//PD_Msg[0][1] 代表 PDO 電壓(fixd mode),最小電壓(PPS ,AVS mode ) 
-//PD_Msg[0][2] 代表 PDO 最大電壓(PPS ,AVS mode) ,最大電流(fixd mode)
-//PD_Msg[0][3] 代表 PDO 最大功率(AVS mode) ,最大電流(PPS mode) ,0 (fixd mode)
+
+//PD_Msg[10][4] represents up to 10 PDOs, each PDO takes up 4 uint16_t
+//PD_Msg[0][0] represents PDO type, 1 represents fixed voltage, 2 represents PPS, 3 represents AVS, 4 represents invalid PDO
+//PD_Msg[0][1] represents PDO voltage (fixd mode), minimum voltage (PPS, AVS mode)
+//PD_Msg[0][2] represents the maximum voltage of PDO (PPS, AVS mode) and the maximum current (fixd mode)
+//PD_Msg[0][3] represents PDO maximum power (AVS mode), maximum current (PPS mode), 0 (fixd mode)
 extern uint16_t PD_Msg[10][4];
 
 //----------------------------------------------------------------------------------------------//
@@ -322,10 +323,17 @@ static uint8_t I2C_ReadByte(uint8_t addr, uint8_t reg);
 static void I2C_SequentialRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t* buffer);
 void CH224_ReadStatus(void);
 void CH224_DataInit(void);
-void CH224_AVS_Request(float vol);
+bool CH224_AVS_Request(float vol);
 bool CH224_PPS_Request(float vol);
-void CH224_Fixed_Request(uint16_t vol );
+bool CH224_Fixed_Request(uint16_t vol );
 void CH224_SourceCap_Analyse();
-bool CH224_HasValidPdVoltage(uint16_t req_mv, uint8_t type);
+bool CH224_HasValidPdVoltage(uint8_t type,uint16_t req_mv );
 uint16_t CH224_GetPPSAVSLimitVoltage(uint8_t type, bool get_max);
+uint16_t CH224_GetFixedVoltage();
+uint16_t CH224_GetPPSVoltage();
+uint16_t CH224_GetAVSVoltage();
+
+bool CH224_HasPPS(void);
+bool CH224_HasAVS(void);
+bool CH224_HasEPR(void);
 #endif /* CH224_H_ */
