@@ -40,11 +40,13 @@
 
 // PPS voltage configuration register (0x53) bit definition
 #define CH224_REG_PPS_CFG      0x53  // PPS voltage configuration register (write-only, unit: 100mV)
-#define CH224_READ_PPS_CFG_STEP 100   // PPS voltage step, unit: 100mV
-#define CH224_PPS_CFG_MAX    2000  // PPS voltage configuration max value (20V, 2000mV)
-#define CH224_PPS_CFG_MIN    500   // PPS voltage configuration min value (5V, 500mV)
-#define CH224_PPS_CFG_STEP   100   // PPS voltage configuration step (100mV)
-
+#define CH224_PPS_CFG_MAX    20.0  // PPS voltage configuration max value (20V, 2000mV)
+#define CH224_PPS_CFG_MIN    3.3 // PPS voltage configuration min value (5V, 500mV)
+#define CH224_PPS_CFG_STEP   0.1   // PPS voltage configuration step (100mV)
+// 
+#define PD_FIXED_SUPPLY 0x01 // Fixed Supply PDO
+#define PD_PPS_SUPPLY 0x02   // Programmable Power Supply PDO
+#define PD_AVS_SUPPLY 0x03    // Adjustable Voltage Supply PDO
 
 // CH224Q PD SRCCAP register address definition
 #define CH224_REG_PD_SRCCAP_START 0x60  // PD SRCCAP data register start address
@@ -321,8 +323,9 @@ static void I2C_SequentialRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t* 
 void CH224_ReadStatus(void);
 void CH224_DataInit(void);
 void CH224_AVS_Request(float vol);
-void CH224_PPS_Request(float vol);
+bool CH224_PPS_Request(float vol);
 void CH224_Fixed_Request(uint16_t vol );
 void CH224_SourceCap_Analyse();
-bool CH224_HasValidFixedVoltage( uint16_t   req_vol);
+bool CH224_HasValidPdVoltage(uint16_t req_mv, uint8_t type);
+uint16_t CH224_GetPPSAVSLimitVoltage(uint8_t type, bool get_max);
 #endif /* CH224_H_ */

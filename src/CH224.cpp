@@ -270,35 +270,49 @@ void CH224_SourceCap_Analyse() {
     }
 }
 /**
- * @brief Checks if the fixed voltage mode is supported and matches the requested voltage.
- *
- * @param req_vol The requested voltage in millivolts (e.g., 5000 for 5V).
- * @return true if a matching fixed voltage is available, false otherwise.
+ * @brief Checks if the requested voltage is supported by the PD_Msg array.
+ * 
+ * @param req_mv The requested voltage in millivolts.5v=5000, 9v=9000, 12v=12000, 15v=15000, 20v=20000, 28v=28000
+ * @param type The type of power supply (1=Fixed, 2=PPS, 3=AVS).
+ * @return true if the requested voltage is supported, false otherwise.
  */
-bool CH224_HasValidFixdVoltage(uint16_t req_vol)
+bool CH224_HasValidPdVoltage(uint16_t req_mv, uint8_t type)
 {
     for (uint8_t i = 0; i < 10; i++) {
-        // PD_Msg[i][0] == 1 means Fixed Supply
-        if (PD_Msg[i][0] == 1) {
-            // Check if voltage matches requested voltage (in mV)
-            if (PD_Msg[i][1] == req_vol) {
-                DEBUG_PRINTF("Found fixed voltage: %dmV at index %d\n", req_vol, i);
-                return true;
+        // type: 1=Fixed, 2=PPS, 3=AVS
+        if (PD_Msg[i][0] == PD_FIXED_SUPPLY) {
+           
+                if (PD_Msg[i][1] == req_mv) {
+                    DEBUG_PRINTF("Found Fixed voltage: %dmV at index %d\n", req_mv, i);
+                    return true;
+                }   
+
+            } 
+        else if (PD_Msg[i][0]==PD_AVS_SUPPLY  || PD_Msg[i][0] == PD_PPS_SUPPLY) { // PPS or AVS
+                
+            if (PD_Msg[i][1] <= req_mv && req_mv <= PD_Msg[i][2]) {
+                    DEBUG_PRINTF("Found %s voltage: %dmV at index %d\n", (type==2)?"PPS":"AVS", req_mv, i);
+                    return true;
+                }
+
             }
-        }
+       
     }
-    DEBUG_PRINTF("Fixed voltage: %dmV not found\n", req_vol);
+
+    DEBUG_PRINTF("PD type %d voltage: %dmV not found\n", type, req_mv);
     return false;
 }
+
+
 
 /**
  * @brief Sends a request to set the fixed voltage mode with the specified voltage.
  *
  * @param vol The desired voltage in millivolts (e.g., 5000 for 5V).
  */
-void CH224_Fixed_Request(uint16_t vol)
+void CH224_Fixed_Request(uint8_t vol)
 {
-    if (!CH224_HasValidFixdVoltage(vol)) {
+    if (!CH224_HasValidPdVoltage( vol*1000 , PD_FIXED_SUPPLY)) {
         DEBUG_PRINTF("Requested voltage %dmV not supported.\r\n", vol);
         return;
     }
@@ -307,42 +321,42 @@ void CH224_Fixed_Request(uint16_t vol)
 
     switch (vol)
     {
-        case 5000:
+        case 5:
             DEBUG_PRINTF("Read before set (5V): 0x%02x\n", read_val);
             if (read_val != CH224_VOL_5V)
                 delay(2);
             I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_5V);
             DEBUG_PRINTF("Req_ 5V... \r\n");
             break;
-        case 9000:
+        case 9:
             DEBUG_PRINTF("Read before set (9V): 0x%02x\n", read_val);
             if (read_val != CH224_VOL_9V)
                 delay(2);
             I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_9V);
             DEBUG_PRINTF("Req_ 9V...  \r\n");
             break;
-        case 12000:
+        case 12:
             DEBUG_PRINTF("Read before set (12V): 0x%02x\n", read_val);
             if (read_val != CH224_VOL_12V)
                 delay(2);
             I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_12V);
             DEBUG_PRINTF("Req_12V...  \r\n");
             break;
-        case 15000:
+        case 15:
             DEBUG_PRINTF("Read before set (15V): 0x%02x\n", read_val);
             if (read_val != CH224_VOL_15V)
                 delay(2);
             I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_15V);
             DEBUG_PRINTF("Req_15V...  \r\n");
             break;
-        case 20000:
+        case 20:
             DEBUG_PRINTF("Read before set (20V): 0x%02x\n", read_val);
             if (read_val != CH224_VOL_20V)
                 delay(2);
             I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_VOL_20V);
             DEBUG_PRINTF("Req_20V...  \r\n");
             break;
-        case 28000 :
+        case 28 :
             DEBUG_PRINTF("Read before set (28V): 0x%02x\n", read_val);
             if (read_val != CH224_VOL_28V)
                 delay(2);
@@ -365,4 +379,71 @@ void CH224_Fixed_Request(uint16_t vol)
 void CH224_AVS_Request(float vol)
 {
     
+}
+
+/**
+ * @brief Sends a request to set the PPS (Programmable Power Supply) mode with the specified voltage.
+ *
+ * @param vol The desired voltage in volts (e.g., 5.0 for 5V).
+ * @return true if the request was successful, false otherwise.
+ */
+bool CH224_PPS_Request(float vol)
+{ // Check if the requested voltage is within the valid range for PPS
+
+    bool found = CH224_HasValidPdVoltage((uint16_t)(vol * 1000), PD_PPS_SUPPLY); // Check if the requested voltage is supported by PD_Msg[]
+    if (!found)
+    {
+        DEBUG_PRINTF("PPS voltage %.2fV (=%dmV) not supported by PD_Msg[]\n", vol, (uint16_t)(vol * 1000));
+        return false;
+    }
+
+    // Read current VOL_CFG register to determine if already in PPS mode
+    uint8_t vol_cfg_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG);
+
+    if (vol_cfg_val != CH224_MODE_PPS)
+    {
+        // First time applying for PPS: set PPS voltage first, then switch to PPS mode
+        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG, (uint8_t)(vol * 10.0f));
+        delay(2);
+        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG, CH224_MODE_PPS);
+        delay(2);
+        DEBUG_PRINTF("First PPS request: Set PPS_CFG=0x%02x, then VOL_CFG=PPS mode\n", (uint8_t)(vol * 10.0f));
+    }
+    else
+    {
+        // Already in PPS mode: just update PPS voltage
+        I2C_WriteByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG, (uint8_t)(vol * 10.0f));
+        delay(2);
+        DEBUG_PRINTF("PPS mode already set: Update PPS_CFG=0x%02x\n", (uint8_t)(vol * 10.0f));
+    }
+
+    // Read back and print for debug
+    uint8_t pps_cfg_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG);
+    DEBUG_PRINTF("PPS_CFG reg readback: 0x%02x\n", pps_cfg_val);
+    DEBUG_PRINTF("PPSdata_write: %02x     Req:  %.2f V \r\n", (uint8_t)(vol * 10.0f), (float)(vol / 10.0f));
+    return true;
+}
+/**
+ * @brief Gets the minimum or maximum voltage limit for PPS or AVS mode.
+ *
+ * @param type The type of power supply (1=Fixed, 2=PPS, 3=AVS).
+ * @param get_max If true, get the maximum voltage; otherwise, get the minimum voltage.
+ * @return uint16_t The voltage limit in millivolts.
+ */
+uint16_t CH224_GetPPSAVSLimitVoltage(uint8_t type, bool get_max)
+{
+    for (uint8_t i = 0; i < 10; i++)
+    {
+        if (PD_Msg[i][0] == type)
+        {
+            if (get_max) {
+                DEBUG_PRINTF("Found %s max voltage: %dmV at index %d\n", (type == PD_PPS_SUPPLY) ? "PPS" : "AVS", PD_Msg[i][2], i);
+                return PD_Msg[i][2];
+            } else {
+                DEBUG_PRINTF("Found %s min voltage: %dmV at index %d\n", (type == PD_PPS_SUPPLY) ? "PPS" : "AVS", PD_Msg[i][1], i);
+                return PD_Msg[i][1];
+            }
+        }
+    }
+    return 0;
 }
