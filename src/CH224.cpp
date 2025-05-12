@@ -116,7 +116,7 @@ void I2C_SequentialRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t* buffer)
 /**
  * @brief Reads the status registers of the CH224 and prints debug information.
  */
-void CH224_ReadStatus() {
+void CH224_readSourceCap() {
    
     CH224_DataInit(); // Initialize data structure
     //
@@ -161,22 +161,6 @@ void CH224_ReadStatus() {
     CH224.PPS_ctrl = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG);
     delay(2);
     DEBUG_PRINTF("CH224.PPS_ctrl:        0x53->%02x\n", CH224.PPS_ctrl);
-
-    // Read Source Capabilities data, using CH224.PD_data as the buffer
-    I2C_SequentialRead(CH224_I2C_ADDRESS, CH224_REG_PD_SRCCAP_START, CH224_REG_PD_SRCCAP_LEN, CH224.PD_data);
-    delay(2);
-    if (CH224.I2C_status.PD_ACT == 1) { // If PD is active
-        DEBUG_PRINTLN("\n/-----------------------------------/");
-        DEBUG_PRINTLN("              Power Data            ");
-        DEBUG_PRINTLN("/-----------------------------------/");
-        for (uint8_t i = 0; i < 48; i++) {
-            DEBUG_PRINTF("0x%02x->%02x\n", 0x60 + i, CH224.PD_data[i]);
-        }
-
-        CH224_SourceCap_Analyse(); // Analyze source capabilities
-
-       
-    }
 }
 
 /**
@@ -271,6 +255,21 @@ void CH224_SourceCap_Analyse() {
         DEBUG_PRINTLN("");
     }
 }
+
+
+bool CH224_isPDSupported(void){
+    uint8_t read_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_STATUS);
+    
+    if (read_val & CH224_STATUS_PD_ACT) {
+        DEBUG_PRINTLN("CH224 supported !");
+        return true;
+    }
+    DEBUG_PRINTLN("CH224 not supported !");
+    return false;
+}
+
+
+
 /**
  * @brief Checks if the requested voltage is supported by the PD_Msg array.
  * 
