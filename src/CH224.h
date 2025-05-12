@@ -333,7 +333,6 @@ static void I2C_SequentialRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t* 
 void CH224_Init(uint8_t sda, uint8_t scl);
 void CH224_DataInit(void);
 void CH224_readSourceCap(void);
-void CH224_SourceCapAnalyse();
 
 bool CH224_isPDSupported(void);
 bool CH224_HasPPS(void);
