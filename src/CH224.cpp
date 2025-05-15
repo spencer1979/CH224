@@ -116,19 +116,31 @@ void I2C_SequentialRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t* buffer)
 /**
  * @brief Reads the status registers of the CH224 and prints debug information.
  */
-void CH224_ReadStatus() {
+bool CH224_readSourceCap() {
    
     CH224_DataInit(); // Initialize data structure
     //
     // Read I2C status register
     CH224.I2C_status.Data = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_STATUS);
+  
+    if( CH224.I2C_status.PD_ACT!=1)
+        return false;
     //force to set output 5V
-    if( CH224.I2C_status.PD_ACT==1)
+    I2C_WriteByte( CH224_I2C_ADDRESS,CH224_REG_VOL_CFG,  CH224_VOL_5V );
+    delay(2);
+    if ( I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG) & CH224_VOL_5V )
     {
-        I2C_WriteByte( CH224_I2C_ADDRESS,CH224_REG_VOL_CFG,  CH224_VOL_5V );
-        delay(2);
-        DEBUG_PRINTF("Force switch to 5V 0x0A->%02x\n", I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_VOL_CFG));
+        DEBUG_PRINTLN("Configured to 5V");
     }
+    else
+    {
+       DEBUG_PRINTLN("Configured to 5V failed");
+       //try to set 5V again
+       I2C_WriteByte( CH224_I2C_ADDRESS,CH224_REG_VOL_CFG,  CH224_VOL_5V );
+       DEBUG_PRINTLN("Configured to 5V again");
+        delay(2);
+    }
+    
     DEBUG_PRINTLN("\n/-----------------------------------/");
     DEBUG_PRINTLN("            CH224 Status           ");
     DEBUG_PRINTLN("/-----------------------------------/");
@@ -161,101 +173,96 @@ void CH224_ReadStatus() {
     CH224.PPS_ctrl = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_PPS_CFG);
     delay(2);
     DEBUG_PRINTF("CH224.PPS_ctrl:        0x53->%02x\n", CH224.PPS_ctrl);
-
+    
     // Read Source Capabilities data, using CH224.PD_data as the buffer
     I2C_SequentialRead(CH224_I2C_ADDRESS, CH224_REG_PD_SRCCAP_START, CH224_REG_PD_SRCCAP_LEN, CH224.PD_data);
     delay(2);
-    if (CH224.I2C_status.PD_ACT == 1) { // If PD is active
-        DEBUG_PRINTLN("\n/-----------------------------------/");
-        DEBUG_PRINTLN("              Power Data            ");
-        DEBUG_PRINTLN("/-----------------------------------/");
-        for (uint8_t i = 0; i < 48; i++) {
-            DEBUG_PRINTF("0x%02x->%02x\n", 0x60 + i, CH224.PD_data[i]);
-        }
 
-        CH224_SourceCap_Analyse(); // Analyze source capabilities
-
-       
-    }
-}
-
-/**
- * @brief Analyzes USB PD Source Capabilities and parses PDOs into Rx_PDOs.
- */
-void CH224_SourceCap_Analyse() {
-    memcpy( &Rx_Header.Data, &CH224.PD_data[0], 2 );
-    if(Rx_Header.Ext==1)
+    // Print the PD data
+    DEBUG_PRINTLN("\n/-----------------------------------/");
+    DEBUG_PRINTLN("              Power Data            ");
+    DEBUG_PRINTLN("/-----------------------------------/");
+    for (uint8_t i = 0; i < 48; i++)
     {
-        memcpy( &Rx_Ext_Header.Data, &CH224.PD_data[2], 2 );
-        for(uint8_t i=0;i<Rx_Ext_Header.DataSize/4;i++)
+        DEBUG_PRINTF("0x%02x->%02x\n", 0x60 + i, CH224.PD_data[i]);
+    }
+    // Print the first 4 bytes of PD_data
+    memcpy(&Rx_Header.Data, &CH224.PD_data[0], 2);
+    // check if the header message include extened header message.
+    if (Rx_Header.Ext == 1)
+    {
+        memcpy(&Rx_Ext_Header.Data, &CH224.PD_data[2], 2);
+        for (uint8_t i = 0; i < Rx_Ext_Header.DataSize / 4; i++)
         {
-            memcpy( &Rx_FixedSupply.Data, &CH224.PD_data[4*(i+1)], 4 );
-            if(Rx_FixedSupply.FixedSupply==3)
+            memcpy(&Rx_FixedSupply.Data, &CH224.PD_data[4 * (i + 1)], 4);
+            if (Rx_FixedSupply.FixedSupply == 3)
             {
-                memcpy( &Rx_PPSupply.Data, &Rx_FixedSupply.Data, 4 );
-                if(Rx_PPSupply.PPS==1)
+                memcpy(&Rx_PPSupply.Data, &Rx_FixedSupply.Data, 4);
+                if (Rx_PPSupply.PPS == 1)
                 {
-                    memcpy( &Rx_AVSupply.Data, &Rx_PPSupply.Data, 4 );
-                    PD_Msg[i][0]=3; // AVS
-                    PD_Msg[i][1]=Rx_AVSupply.MinVoltage*100;
-                    PD_Msg[i][2]=Rx_AVSupply.MaxVoltage*100;
-                    PD_Msg[i][3]=Rx_AVSupply.PDP*1;
+                    memcpy(&Rx_AVSupply.Data, &Rx_PPSupply.Data, 4);
+                    PD_Msg[i][0] = 3; // AVS
+                    PD_Msg[i][1] = Rx_AVSupply.MinVoltage * 100;
+                    PD_Msg[i][2] = Rx_AVSupply.MaxVoltage * 100;
+                    PD_Msg[i][3] = Rx_AVSupply.PDP * 1;
                     continue;
                 }
-                PD_Msg[i][0]=2;// PPS
-                PD_Msg[i][1]=Rx_PPSupply.MinVoltage*100;
-                PD_Msg[i][2]=Rx_PPSupply.MaxVoltage*100;
-                PD_Msg[i][3]=Rx_PPSupply.MaxCurrent*50;
+                PD_Msg[i][0] = 2; // PPS
+                PD_Msg[i][1] = Rx_PPSupply.MinVoltage * 100;
+                PD_Msg[i][2] = Rx_PPSupply.MaxVoltage * 100;
+                PD_Msg[i][3] = Rx_PPSupply.MaxCurrent * 50;
                 continue;
             }
-            PD_Msg[i][0]=1; // Fixed Supply
-            PD_Msg[i][1]=Rx_FixedSupply.Voltage*50;
-            PD_Msg[i][2]=Rx_FixedSupply.MaxCurrent*10;
-            PD_Msg[i][3]=0;
-            if( PD_Msg[i][1]==0&& PD_Msg[i][2]==0 &&PD_Msg[i][3]==0)
-                      PD_Msg[i][0]=4; // 代表無效的 PDO
+            PD_Msg[i][0] = 1; // Fixed Supply
+            PD_Msg[i][1] = Rx_FixedSupply.Voltage * 50;
+            PD_Msg[i][2] = Rx_FixedSupply.MaxCurrent * 10;
+            PD_Msg[i][3] = 0;
+            if (PD_Msg[i][1] == 0 && PD_Msg[i][2] == 0 && PD_Msg[i][3] == 0)
+                PD_Msg[i][0] = 4; // 代表無效的 PDO
         }
     }
     else
     {
-        for(uint8_t i=0;i<Rx_Header.NumDO;i++)
+        for (uint8_t i = 0; i < Rx_Header.NumDO; i++)
         {
-            memcpy( &Rx_FixedSupply.Data, &CH224.PD_data[4*i+2], 4 );
-            if(Rx_FixedSupply.FixedSupply==3)
+            memcpy(&Rx_FixedSupply.Data, &CH224.PD_data[4 * i + 2], 4);
+            if (Rx_FixedSupply.FixedSupply == 3)
             {
-                memcpy( &Rx_PPSupply.Data, &Rx_FixedSupply.Data, 4 );
-                PD_Msg[i][0]=2;// PPS
-                PD_Msg[i][1]=Rx_PPSupply.MinVoltage*100;
-                PD_Msg[i][2]=Rx_PPSupply.MaxVoltage*100;
-                PD_Msg[i][3]=Rx_PPSupply.MaxCurrent*50;
+                memcpy(&Rx_PPSupply.Data, &Rx_FixedSupply.Data, 4);
+                PD_Msg[i][0] = 2; // PPS
+                PD_Msg[i][1] = Rx_PPSupply.MinVoltage * 100;
+                PD_Msg[i][2] = Rx_PPSupply.MaxVoltage * 100;
+                PD_Msg[i][3] = Rx_PPSupply.MaxCurrent * 50;
                 continue;
             }
-            PD_Msg[i][0]=1;//   Fixed Supply
-            PD_Msg[i][1]=Rx_FixedSupply.Voltage*50;
-            PD_Msg[i][2]=Rx_FixedSupply.MaxCurrent*10;
-            PD_Msg[i][3]=0;
+            PD_Msg[i][0] = 1; //   Fixed Supply
+            PD_Msg[i][1] = Rx_FixedSupply.Voltage * 50;
+            PD_Msg[i][2] = Rx_FixedSupply.MaxCurrent * 10;
+            PD_Msg[i][3] = 0;
         }
     }
 
     DEBUG_PRINTLN("\n/-----------------------------------/");
     DEBUG_PRINTLN("             Power Supply            ");
     DEBUG_PRINTLN("/-----------------------------------/");
-    for (uint8_t i = 0; i < 10; i++) {
-        switch (PD_Msg[i][0]) {
-            case 0:
-                break;
-            case 1:
-                DEBUG_PRINTF("[%02d] Fixed    %.2fV   %.2fA\n", i + 1, (float)PD_Msg[i][1] / 1000, (float)PD_Msg[i][2] / 1000);
-                break;
-            case 2:
-                DEBUG_PRINTF("[%02d]  PPS     %.2fV - %.2fV   %.2fA\n", i + 1, (float)PD_Msg[i][1] / 1000, (float)PD_Msg[i][2] / 1000, (float)PD_Msg[i][3] / 1000);
-                break;
-            case 3:
-                DEBUG_PRINTF("[%02d]  AVS     %.2fV - %.2fV   %-3dW\n", i + 1, (float)PD_Msg[i][1] / 1000, (float)PD_Msg[i][2] / 1000, PD_Msg[i][3]);
-                break;
-            case 4:
-                DEBUG_PRINTF("[%02d]  ----------Rev----------\n", i + 1);
-                break;
+    for (uint8_t i = 0; i < 10; i++)
+    {
+        switch (PD_Msg[i][0])
+        {
+        case 0:
+            break;
+        case 1:
+            DEBUG_PRINTF("[%02d] Fixed    %.2fV   %.2fA\n", i + 1, (float)PD_Msg[i][1] / 1000, (float)PD_Msg[i][2] / 1000);
+            break;
+        case 2:
+            DEBUG_PRINTF("[%02d]  PPS     %.2fV - %.2fV   %.2fA\n", i + 1, (float)PD_Msg[i][1] / 1000, (float)PD_Msg[i][2] / 1000, (float)PD_Msg[i][3] / 1000);
+            break;
+        case 3:
+            DEBUG_PRINTF("[%02d]  AVS     %.2fV - %.2fV   %-3dW\n", i + 1, (float)PD_Msg[i][1] / 1000, (float)PD_Msg[i][2] / 1000, PD_Msg[i][3]);
+            break;
+        case 4:
+            DEBUG_PRINTF("[%02d]  ----------Rev----------\n", i + 1);
+            break;
         }
     }
 
@@ -263,14 +270,35 @@ void CH224_SourceCap_Analyse() {
     DEBUG_PRINTLN("\n/-----------------------------------/");
     DEBUG_PRINTLN("           PD_Msg Raw Data           ");
     DEBUG_PRINTLN("/-----------------------------------/");
-    for (uint8_t i = 0; i < 10; i++) {
+    for (uint8_t i = 0; i < 10; i++)
+    {
         DEBUG_PRINTF("PD_Msg[%d]: ", i);
-        for (uint8_t j = 0; j < 4; j++) {
+        for (uint8_t j = 0; j < 4; j++)
+        {
             DEBUG_PRINTF("%5d ", PD_Msg[i][j]);
         }
         DEBUG_PRINTLN("");
     }
+    DEBUG_PRINTLN("/-----------------------------------/");
+    DEBUG_PRINTLN("            End of Data             ");
 }
+
+
+
+
+bool CH224_isPDSupported(void){
+    uint8_t read_val = I2C_ReadByte(CH224_I2C_ADDRESS, CH224_REG_STATUS);
+    
+    if (read_val & CH224_STATUS_PD_ACT) {
+        DEBUG_PRINTLN("CH224 supported !");
+        return true;
+    }
+    DEBUG_PRINTLN("CH224 not supported !");
+    return false;
+}
+
+
+
 /**
  * @brief Checks if the requested voltage is supported by the PD_Msg array.
  * 

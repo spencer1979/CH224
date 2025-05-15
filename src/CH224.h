@@ -12,6 +12,15 @@
 #include <stdint.h> 
 #define CH224_I2C_ADDRESS      0x23
 
+#define CH224_STATUS_BC_ACT      (1 << 0)
+#define CH224_STATUS_QC2_ACT     (1 << 1)
+#define CH224_STATUS_QC3_ACT     (1 << 2)
+#define CH224_STATUS_PD_ACT      (1 << 3)
+#define CH224_STATUS_EPR_ACT     (1 << 4)
+#define CH224_STATUS_EPR_EXIST   (1 << 5)
+#define CH224_STATUS_AVS_EXIST   (1 << 6)
+#define CH224_STATUS_RESERVED    (1 << 7)
+
 // Protocol status register (0x09)
 #define CH224_REG_STATUS      0x09
 
@@ -316,24 +325,29 @@ extern uint16_t PD_Msg[10][4];
 
 //----------------------------------------------------------------------------------------------//
 //----------------------------------------------------------------------------------------------//
-
-void CH224_Init(uint8_t sda, uint8_t scl);
+// I2C Read write Function prototypes
 static void I2C_WriteByte(uint8_t addr, uint8_t reg, uint8_t data);
 static uint8_t I2C_ReadByte(uint8_t addr, uint8_t reg);
 static void I2C_SequentialRead(uint8_t addr, uint8_t reg, uint8_t len, uint8_t* buffer);
-void CH224_ReadStatus(void);
+//CH224 Function prototypes
+void CH224_Init(uint8_t sda, uint8_t scl);
 void CH224_DataInit(void);
+void CH224_readSourceCap(void);
+
+bool CH224_isPDSupported(void);
+bool CH224_HasPPS(void);
+bool CH224_HasAVS(void);
+bool CH224_HasEPR(void);
+
 bool CH224_AVS_Request(float vol);
 bool CH224_PPS_Request(float vol);
 bool CH224_Fixed_Request(uint16_t vol );
-void CH224_SourceCap_Analyse();
+
 bool CH224_HasValidPdVoltage(uint8_t type,uint16_t req_mv );
 uint16_t CH224_GetPPSAVSLimitVoltage(uint8_t type, bool get_max);
 uint16_t CH224_GetFixedVoltage();
 uint16_t CH224_GetPPSVoltage();
 uint16_t CH224_GetAVSVoltage();
 
-bool CH224_HasPPS(void);
-bool CH224_HasAVS(void);
-bool CH224_HasEPR(void);
+
 #endif /* CH224_H_ */
